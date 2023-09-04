@@ -155,7 +155,7 @@ class FileSystemManager:
                 self.search_files,
                 {"search_filename": "", "search_content": "", "file_extension": "", "min_size": "", "max_size": "",
                  "start_path": "/"},
-                ["search_filename"],
+                [],
                 {
                     "command": "Search for files matching specific criteria.",
                     "search_filename": "(optional): Search for files with a specific name.",
@@ -474,10 +474,34 @@ class FileSystemManager:
         else:
             print("Not found relevant files")
 
+    @staticmethod
+    def is_positive_or_zero_integer(value):
+        try:
+            if not value.isdigit():
+                return False
+
+            int_value = int(value)
+            return int_value >= 0
+        except ValueError:
+            return False
+
     def search_files(self, search_filename: str = None, search_content: str = None, file_extension: str = None,
                      min_size: str = None, max_size: str = None, start_path: str = "/") -> bool:
         # Search for files matching specific criteria
         results = []
+        # Check if at least one search parameter is given
+        if all(param in [None, ""] for param in (search_filename, search_content, file_extension, min_size, max_size)):
+            print(ErrorMessages.NoSearchCriteriaError.value)
+            return False
+        # Check and validate min_size and max_size
+        if min_size:
+            if not self.is_positive_or_zero_integer(min_size):
+                print(ErrorMessages.InvalidMinSizeError.value)
+                return False
+        if max_size:
+            if not self.is_positive_or_zero_integer(max_size):
+                print(ErrorMessages.InvalidMaxSizeError.value)
+                return False
 
         def dfs_search(current_node: TreeNode, current_node_path: str) -> None:
             if current_node.is_file and (
