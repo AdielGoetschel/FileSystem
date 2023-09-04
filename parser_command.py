@@ -1,12 +1,12 @@
 import argparse
 import shlex
-from typing import Union, Optional
+from typing import Union, Optional, Tuple, Dict
 from file_system_manager import FileSystemManager
 from error_messages import ErrorMessages
 
 
 class Parser:
-    def __init__(self):
+    def __init__(self, file_system_manager):
         self.file_system_manager: FileSystemManager = file_system_manager
         self.parser, self.subparsers = self.create_parser()
 
@@ -67,37 +67,24 @@ class Parser:
         # parse the arguments
         return self.parser.parse_args(args)
 
-    def main_loop(self):
-        while True:
-            current_dir = self.file_system_manager.show_current_directory()
-            # Get user input for command
-            input_string = input(f"Current directory: {current_dir}\n" "Enter a command: ")
+    def get_input(self, current_dir: str) -> Union[Tuple[None, None], Tuple[Dict[str, Union[str, bool]], str]]:
+        # The function gets the user input, parses the input string, and creates a dictionary of command arguments
+        input_string = input(f"Current directory: {current_dir}\n" "Enter a command: ")  # Get user input for command
 
-            if not input_string:
-                continue
+        if not input_string:
+            return None, None
 
-            # Parse the input string using parse_command_string
-            args = self.parse_command_string(input_string)
-            if args is None:  # Help message has been displayed, skip the command execution
-                continue
-            if not isinstance(args, argparse.Namespace):
-                print(f"{ErrorMessages.InvalidCommandError}{args}")
-                continue
+        # Parse the input string using parse_command_string
+        args = self.parse_command_string(input_string)
+        if args is None:  # Help message has been displayed, skip the command execution
+            return None, None
+        if not isinstance(args, argparse.Namespace):
+            print(f"{ErrorMessages.InvalidCommandError.value}{args}")
+            return None, None
 
-            # Check if a command is provided
-            # Create a dictionary of command arguments from parsed arguments
-
-            command_args = {
-                arg_name: bool(arg_value.lower() == 'true') if arg_name in ["recursive", "add", "append"]
-                                                               and isinstance(arg_value, str)
-                else arg_value for arg_name, arg_value in vars(args).items() if arg_name != "command"}
-
-            # Get the function associated with the command
-            command_function = self.file_system_manager.command_mappings[args.command][0]
-
-            # Execute the command function with the parsed arguments
-            result = command_function(**command_args)
-            if result:
-                print("Successfully..")
-            else:
-                print(ErrorMessages.GeneralError)
+        # Create a dictionary of command arguments from parsed arguments
+        command_args = {
+            arg_name: bool(arg_value.lower() == 'true') if arg_name in ["recursive", "add", "append"]
+                                                           and isinstance(arg_value, str)
+            else arg_value for arg_name, arg_value in vars(args).items() if arg_name != "command"}
+        return command_args, args.command
