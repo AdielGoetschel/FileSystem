@@ -1,8 +1,8 @@
+from path_handler import PathHandler
+from tree_node import TreeNode
+from error_messages import ErrorMessages
+from typing import Dict, List, TypedDict, Union, Callable, Type
 
-from PathHandler import PathHandler
-from TreeNode import TreeNode
-from globals import ERRORS
-from typing import Dict, List
 """
 The FileSystemManager acts as a guide for users, helping them navigate and manipulate the file system
 using the PathHandler for paths and the TreeNode for files and directories.
@@ -11,15 +11,27 @@ straightforward and user-friendly.
 """
 
 
+class CommandLayout(TypedDict):
+    callable: Callable
+    arguments: Dict[str, Union[str, bool]]
+    required_arguments: List[str]
+    help_info: Dict[str, str]
+
+
+CommandMappingType: Type[Dict[str, CommandLayout]]
+
+
 class FileSystemManager:
     def __init__(self):
-        self.path_handler = PathHandler()
-        # dict of commands: in the list for each command:
-        #     command function
-        #     dict of all arguments(with default values if necessary)
-        #     list of required arguments
-        #     dict of help explanation of the command and the arguments
-        self.command_mappings: Dict[str, List[callable, Dict[str], List[str], Dict[str, str]]] = {
+        self.path_handler: PathHandler = PathHandler()
+        """
+        dict of commands: in the list for each command:
+            command function
+            dict of all arguments(with default values if necessary)
+            list of required arguments
+            dict of help explanation of the command and the arguments
+        """
+        self.command_mappings: CommandMappingType = {
             "create": [
                 self.create_file_or_dir,
                 {"name": "", "content": "", "recursive": False},
@@ -172,6 +184,9 @@ class FileSystemManager:
                 }],
         }
 
+    def get_command_from_name(self, command_name: str) -> callable:
+        return self.command_mappings[command_name][0]
+
     def _create_file_or_dir(self, new_name: str, parent_node: TreeNode, content: str = "") -> TreeNode:
         # Create a new directory or file node and add it as a child to the parent node
         is_file = self.path_handler.is_file(new_name)
@@ -187,14 +202,14 @@ class FileSystemManager:
         parent_node = self.path_handler.get_node_by_path(parent_path, show_errors=False)
         if parent_node:
             if parent_node.is_file:  # the parent node should be a path, not a file
-                print(f"{ERRORS['InvalidPath']}{name} The parent node should be a path, not a file")
+                print(f"{ErrorMessages.InvalidPath.value}{name} The parent node should be a path, not a file")
                 return False
             else:
                 # Check if a node with the same name already exists in the parent directory
                 existing_node = parent_node.get_child_by_name(new_name)
                 if existing_node:
                     parent_path = "" if parent_path == "/" else parent_path
-                    print(f"{parent_path}/{new_name}{ERRORS['ExistsError']}")
+                    print(f"{parent_path}/{new_name}{ErrorMessages.ExistsError.value}")
                     return False
                 else:  # create the new node
                     self._create_file_or_dir(new_name, parent_node, content)
@@ -202,7 +217,7 @@ class FileSystemManager:
         else:  # if the parent of the new node does not exist
             if not recursive:
                 # The parent directory must exist for non-recursive creation
-                print(f"{ERRORS['DirectoryNotFoundError']}{parent_path}")
+                print(f"{ErrorMessages.DirectoryNotFoundError.value}{parent_path}")
                 return False
 
             else:  # handle case of recursive creation
@@ -224,7 +239,7 @@ class FileSystemManager:
                             if self.path_handler.is_file(path_components[i]):
                                 # the parent node should be a path, not a file
                                 print(
-                                    f"{ERRORS['InvalidPath']}{name}. The parent node should be a path, not a file")
+                                    f"{ErrorMessages.InvalidPath.value}{name}. The parent node should be a path, not a file")
                                 return False
                             else:
                                 new_node = self._create_file_or_dir(path_components[i], current_node, content)
@@ -241,10 +256,10 @@ class FileSystemManager:
                 print(file_node.read_content())
                 return True
             else:
-                print(f"{ERRORS['ReadPermissionError']}")
+                print(f"{ErrorMessages.ReadPermissionError.value}")
                 return False
         else:
-            print(f"{ERRORS['IsADirectoryError']}Cannot read a directory")
+            print(f"{ErrorMessages.IsADirectoryError.value}Cannot read a directory")
             return False
 
     def write_to_file(self, filename: str, content: str, append: bool = True) -> bool:
@@ -260,10 +275,10 @@ class FileSystemManager:
                     file_node.write_content(content, mode="w")
                 return True
             else:
-                print(f"{ERRORS['WritePermissionError']}")
+                print(f"{ErrorMessages.WritePermissionError.value}")
                 return False
         else:
-            print(f"{ERRORS['IsADirectoryError']}Cannot write to a directory")
+            print(f"{ErrorMessages.IsADirectoryError.value}Cannot write to a directory")
             return False
 
     def delete_file_or_dir(self, name: str) -> bool:
@@ -279,13 +294,13 @@ class FileSystemManager:
                     return True
                 else:
                     if self.path_handler.is_file(name_to_del):
-                        print(f"{ERRORS['FileNotFoundError']}{parent_dir_path}/{name_to_del}")
+                        print(f"{ErrorMessages.FileNotFoundError.value}{parent_dir_path}/{name_to_del}")
                     else:
-                        print(f"{ERRORS['DirectoryNotFoundError']}{parent_dir_path}/{name_to_del}")
+                        print(f"{ErrorMessages.DirectoryNotFoundError.value}{parent_dir_path}/{name_to_del}")
                     return False
 
             else:
-                print(f"{ERRORS['InvalidPath']}{name}The parent node should be a path, not a file")
+                print(f"{ErrorMessages.InvalidPath.value}{name}The parent node should be a path, not a file")
                 return False
 
     def copy_file_or_dir(self, source_path: str, destination_path: str, recursive: bool = False) -> bool:
@@ -324,7 +339,8 @@ class FileSystemManager:
                             return False
                 return True
             else:
-                print(f"{ERRORS['InvalidPath']}{destination_path} the destination path should a directory format")
+                print(
+                    f"{ErrorMessages.InvalidPath.value}{destination_path} the destination path should a directory format")
                 return False
 
     def move_file_or_dir(self, source_path: str, destination_path: str, recursive: bool = False) -> bool:
@@ -351,7 +367,7 @@ class FileSystemManager:
         if not dir_node:
             return False
         elif dir_node.is_file:
-            print(f"{ERRORS['InvalidPath']}{directory_name} the path should a directory and not a file")
+            print(f"{ErrorMessages.InvalidPath.value}{directory_name} the path should a directory and not a file")
             return False
         else:
             print(f"{'    ' * indent}└── {dir_node.name}")
@@ -374,7 +390,7 @@ class FileSystemManager:
             print(file_node.size)
             return True
         else:
-            print(f"{ERRORS['IsADirectoryError']}Cannot get size of a directory")
+            print(f"{ErrorMessages.IsADirectoryError.value}Cannot get size of a directory")
             return False
 
     def get_creation_time(self, filename: str) -> bool:
@@ -386,7 +402,7 @@ class FileSystemManager:
             print(file_node.get_creation_time())
             return True
         else:
-            print(f"{ERRORS['IsADirectoryError']}Cannot get creation time of a directory")
+            print(f"{ErrorMessages.IsADirectoryError.value}Cannot get creation time of a directory")
             return False
 
     def get_last_modified_time(self, filename: str) -> bool:
@@ -398,7 +414,7 @@ class FileSystemManager:
             print(file_node.get_last_modified())
             return True
         else:
-            print(f"{ERRORS['IsADirectoryError']}Cannot get  last modification time of a directory")
+            print(f"{ErrorMessages.IsADirectoryError.value}Cannot get  last modification time of a directory")
             return False
 
     def get_file_permissions(self, filename: str) -> bool:
@@ -413,7 +429,7 @@ class FileSystemManager:
             print(permissions)
             return True
         else:
-            print(f"{ERRORS['IsADirectoryError']}Cannot get permissions of a directory")
+            print(f"{ErrorMessages.IsADirectoryError.value}Cannot get permissions of a directory")
             return False
 
     def set_file_permissions(self, filename: str, permission: str, add: bool) -> bool:
@@ -425,7 +441,7 @@ class FileSystemManager:
             file_node.get_permissions()[permission] = add
             return True
         else:
-            print(f"{ERRORS['IsADirectoryError']}Cannot set permissions of a directory")
+            print(f"{ErrorMessages.IsADirectoryError.value}Cannot set permissions of a directory")
             return False
 
     def show_current_directory(self) -> str:
@@ -435,7 +451,7 @@ class FileSystemManager:
     def update_current_dir(self, directory: str) -> bool:
         # change the current working directory
         if self.path_handler.is_file(directory):
-            print(f"{ERRORS['InvalidPath']}{directory}"
+            print(f"{ErrorMessages.InvalidPath.value}{directory}"
                   f" The new current directory should be a path, not a file")
             return False
         exist_dir = self.path_handler.get_node_by_path(directory, show_errors=True)
@@ -450,6 +466,13 @@ class FileSystemManager:
     def go_to_previous_dir(self) -> bool:
         # change the current working directory to the previous directory
         return self.path_handler.go_back_dir()
+
+    def output_search(self, content: List) -> None:
+        if content:
+            for item in content:
+                print(item)
+        else:
+            print("Not found relevant files")
 
     def search_files(self, search_filename: str = None, search_content: str = None, file_extension: str = None,
                      min_size: str = None, max_size: str = None, start_path: str = "/") -> bool:
@@ -477,5 +500,5 @@ class FileSystemManager:
         if not search_node:
             return False
         dfs_search(search_node, start_path)
-        print(results)
+        self.output_search(results)
         return True
