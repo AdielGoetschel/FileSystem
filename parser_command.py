@@ -1,11 +1,13 @@
 import argparse
 import shlex
 from typing import Union, Optional
+from file_system_manager import FileSystemManager
+from error_messages import ErrorMessages
 
 
 class Parser:
-    def __init__(self, file_system_manager):
-        self.file_system_manager = file_system_manager
+    def __init__(self):
+        self.file_system_manager: FileSystemManager = file_system_manager
         self.parser, self.subparsers = self.create_parser()
 
     # Function to create the argument parser with subparsers for commands
@@ -18,7 +20,7 @@ class Parser:
 
         # Loop through each command and its associated arguments in the command_mappings
         for command, (
-        _, arg_names, mandatory_args, help_descriptor) in self.file_system_manager.command_mappings.items():
+                _, arg_names, mandatory_args, help_descriptor) in self.file_system_manager.command_mappings.items():
             # Add a subparser for the current command
             parser_command = subparsers.add_parser(command, help=self.file_system_manager.command_mappings[command][3][
                 "command"])
@@ -79,7 +81,7 @@ class Parser:
             if args is None:  # Help message has been displayed, skip the command execution
                 continue
             if not isinstance(args, argparse.Namespace):
-                print(f"Invalid Command: {args}")
+                print(f"{ErrorMessages.InvalidCommandError}{args}")
                 continue
 
             # Check if a command is provided
@@ -98,4 +100,4 @@ class Parser:
             if result:
                 print("Successfully..")
             else:
-                print("Please try again")
+                print(ErrorMessages.GeneralError)
