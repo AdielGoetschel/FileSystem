@@ -1,5 +1,5 @@
-from TreeNode import TreeNode
-from globals import ERRORS
+from tree_node import TreeNode
+from error_messages import ErrorMessages
 from typing import Union
 
 """
@@ -51,9 +51,9 @@ class PathHandler:
                 if show_errors:   # show error if the node is not found.
                     current_node_name = "" if current_node.name == "/" else current_node.name
                     if self.is_file(component):
-                        print(f"{ERRORS['FileNotFoundError']}{current_node_name}/{component}")
+                        print(f"{ErrorMessages.FileNotFoundError.value}{current_node_name}/{component}")
                     else:
-                        print(f"{ERRORS['DirectoryNotFoundError']}{current_node_name}/{component}")
+                        print(f"{ErrorMessages.DirectoryNotFoundError.value}{current_node_name}/{component}")
                 return False
             current_node = next_node
         return current_node
@@ -67,7 +67,7 @@ class PathHandler:
     def go_back_dir(self) -> bool:
         # change the current working directory to the previous directory
         if not self.previous_directory:
-            print(f"{ERRORS['DirectoryNotFoundError']}previous directory does not found")
+            print(f"{ErrorMessages.DirectoryNotFoundError.value}previous directory does not found")
             return False
         cur_dir = self.current_directory
         self.current_directory = self.previous_directory
