@@ -19,11 +19,12 @@ class Parser:
         subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
         # Loop through each command and its associated arguments in the command_mappings
-        for command, (
-                _, arg_names, mandatory_args, help_descriptor) in self.file_system_manager.command_mappings.items():
+        for command, command_layout in self.file_system_manager.command_mappings.items():
+            arg_names = command_layout.arguments
+            mandatory_args = command_layout.required_arguments
+            help_descriptor = command_layout.help_info
             # Add a subparser for the current command
-            parser_command = subparsers.add_parser(command, help=self.file_system_manager.command_mappings[command][3][
-                "command"])
+            parser_command = subparsers.add_parser(command, help=help_descriptor["command"])
 
             # Add command-specific arguments to the subparser
             for arg_name in arg_names:
@@ -32,12 +33,12 @@ class Parser:
                 # Add the argument to the subparser with explanations
                 if required:
                     parser_command.add_argument(f"--{arg_name}",
-                                                help=self.file_system_manager.command_mappings[command][3][arg_name],
+                                                help=help_descriptor[arg_name],
                                                 required=required)
                 else:
                     def_value = arg_names[arg_name]
                     parser_command.add_argument(f"--{arg_name}",
-                                                help=self.file_system_manager.command_mappings[command][3][arg_name],
+                                                help=help_descriptor[arg_name],
                                                 required=required, default=def_value)
 
         return parser, subparsers
@@ -60,7 +61,7 @@ class Parser:
                 if isinstance(action, argparse._SubParsersAction):  # Check if it's a subparsers action
                     if command_name in action.choices:
                         # Print the help_descriptor
-                        print(self.file_system_manager.command_mappings[command_name][3]["command"])
+                        print(self.file_system_manager.command_mappings[command_name].help_info["command"])
                         action.choices[command_name].print_help()
             return None
 

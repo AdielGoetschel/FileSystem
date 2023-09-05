@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from path_handler import PathHandler
 from tree_node import TreeNode
 from error_messages import ErrorMessages
@@ -11,8 +13,9 @@ straightforward and user-friendly.
 """
 
 
-class CommandLayout(TypedDict):
-    callable: Callable
+@dataclass
+class CommandLayout:
+    cb: Callable
     arguments: Dict[str, Union[str, bool]]
     required_arguments: List[str]
     help_info: Dict[str, str]
@@ -46,7 +49,7 @@ class FileSystemManager:
             dict of help explanation of the command and the arguments
         """
         self.command_mappings: CommandMappingType = {
-            "create": [
+            "create": CommandLayout(
                 self.create_file_or_dir,
                 {"name": "", "content": "", "recursive": False},
                 ["name"],
@@ -56,8 +59,8 @@ class FileSystemManager:
                     "content": "(optional): Content to be written in the file.",
                     "recursive": "(optional): Create directories recursively (true/false)."
                 }
-            ],
-            "read": [
+        ),
+            "read": CommandLayout(
                 self.read_file,
                 {"filename": ""},
                 ["filename"],
@@ -65,8 +68,8 @@ class FileSystemManager:
                     "command": "Read and display the content of a file.",
                     "filename": "Name of the file to be read."
                 }
-            ],
-            "write": [
+            ),
+            "write": CommandLayout(
                 self.write_to_file,
                 {"filename": "", "content": "", "append": True},
                 ["filename", "content"],
@@ -76,8 +79,8 @@ class FileSystemManager:
                     "content": "Content to be written.",
                     "append": "(optional): Append to the file (true/false)."
                 }
-            ],
-            "delete": [
+            ),
+            "delete": CommandLayout(
                 self.delete_file_or_dir,
                 {"name": ""},
                 ["name"],
@@ -85,8 +88,8 @@ class FileSystemManager:
                     "command": "Delete a file or directory.",
                     "name": "Name of the file or directory to be deleted."
                 }
-            ],
-            "copy": [
+            ),
+            "copy": CommandLayout(
                 self.copy_file_or_dir,
                 {'source_path': "", 'destination_path': "", 'recursive': False},
                 ['source_path', 'destination_path'],
@@ -96,8 +99,8 @@ class FileSystemManager:
                     "destination_path": "Path of the destination directory.",
                     "recursive": "(optional): Copy recursively (true/false)."
                 }
-            ],
-            "move": [
+            ),
+            "move": CommandLayout(
                 self.move_file_or_dir,
                 {"source_path": "", "destination_path": "", "recursive": False},
                 ["source_path", "destination_path"],
@@ -107,8 +110,8 @@ class FileSystemManager:
                     "destination_path": "Path of the destination directory.",
                     "recursive": "(optional): Move recursively (true/false)."
                 }
-            ],
-            "list": [
+            ),
+            "list": CommandLayout(
                 self.display_directory_content,
                 {"directory_name": "", "recursive": False},
                 ["directory_name"],
@@ -117,8 +120,8 @@ class FileSystemManager:
                     "directory_name": "Name of the directory to list.",
                     "recursive": "(optional): List recursively (true/false)."
                 }
-            ],
-            "size": [
+            ),
+            "size": CommandLayout(
                 self.get_file_size,
                 {"filename": ""},
                 ["filename"],
@@ -126,8 +129,8 @@ class FileSystemManager:
                     "command": "Get the size of a file in bytes.",
                     "filename": "Name of the file."
                 }
-            ],
-            "permissions": [
+            ),
+            "permissions": CommandLayout(
                 self.get_file_permissions,
                 {"filename": ""},
                 ["filename"],
@@ -135,8 +138,8 @@ class FileSystemManager:
                     "command": "Get the permissions of a file.",
                     "filename": "Name of the file."
                 }
-            ],
-            "set_permissions": [
+            ),
+            "set_permissions": CommandLayout(
                 self.set_file_permissions,
                 {"filename": "", "permission": "", "add": ""},
                 ["filename", "permission", "add"],
@@ -146,8 +149,8 @@ class FileSystemManager:
                     "permission": "Permission to set.",
                     "add": "Add the permission (true/false)."
                 }
-            ],
-            "creation_time": [
+            ),
+            "creation_time": CommandLayout(
                 self.get_creation_time,
                 {"filename": ""},
                 ["filename"],
@@ -155,8 +158,8 @@ class FileSystemManager:
                     "command": "Get the creation time of a file.",
                     "filename": "Name of the file."
                 }
-            ],
-            "last_modification_time": [
+            ),
+            "last_modification_time": CommandLayout(
                 self.get_last_modified_time,
                 {"filename": ""},
                 ["filename"],
@@ -164,8 +167,8 @@ class FileSystemManager:
                     "command": "Get the last modification time of a file.",
                     "filename": "Name of the file."
                 }
-            ],
-            "search": [
+            ),
+            "search": CommandLayout(
                 self.search_files,
                 {"search_filename": "", "search_content": "", "file_extension": "", "min_size": "", "max_size": "",
                  "start_path": "/"},
@@ -179,8 +182,8 @@ class FileSystemManager:
                     "max_size": "(optional): Maximum size of files to search for.",
                     "start_path": "(optional): Path to start the search from."
                 }
-            ],
-            "change_current_directory": [
+            ),
+            "change_current_directory": CommandLayout(
                 self.update_current_dir,
                 {"directory": ""},
                 ["directory"],
@@ -188,18 +191,18 @@ class FileSystemManager:
                     "command": "Change the current working directory.",
                     "directory": "Directory to change to."
                 }
-            ],
-            "go_to_previous_directory": [
+            ),
+            "go_to_previous_directory": CommandLayout(
                 self.go_to_previous_dir,
-                [],
                 {},
+                [],
                 {
                     "command": "Change the current working directory to the previous directory."
-                }],
+                }),
         }
 
     def get_command_from_name(self, command_name: str) -> callable:
-        return self.command_mappings[command_name][0]
+        return self.command_mappings[command_name].cb
 
     def _create_file_or_dir(self, new_name: str, parent_node: TreeNode, content: str = "") -> TreeNode:
         # Create a new directory or file node and add it as a child to the parent node
