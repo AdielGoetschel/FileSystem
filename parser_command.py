@@ -6,8 +6,8 @@ from error_messages import ErrorMessages
 
 
 class Parser:
-    def __init__(self, file_system_manager):
-        self.file_system_manager: FileSystemManager = file_system_manager
+    def __init__(self):
+        self.file_system_manager: FileSystemManager = FileSystemManager.instance()
         self.parser, self.subparsers = self.create_parser()
 
     # Function to create the argument parser with subparsers for commands

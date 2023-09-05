@@ -6,7 +6,7 @@ from error_messages import ErrorMessages
 def main():
     is_running: bool = True
     file_system_manager = FileSystemManager()
-    parser = Parser(file_system_manager)
+    parser = Parser()
     while is_running:
         current_dir = file_system_manager.show_current_directory()
         command_args, command_name = parser.get_input(current_dir)

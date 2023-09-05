@@ -22,6 +22,20 @@ CommandMappingType: Type[Dict[str, CommandLayout]]
 
 
 class FileSystemManager:
+    _instance = None
+
+    def __new__(cls):
+        # create a new instance of a class
+        if cls._instance is None:
+            # if the singleton instance has not been created, create a new instance of the class
+            cls._instance = super(FileSystemManager, cls).__new__(cls)
+        return cls._instance
+
+    @classmethod
+    def instance(cls):
+        # Return the existing singleton instance
+        return cls._instance
+
     def __init__(self):
         self.path_handler: PathHandler = PathHandler()
         """
