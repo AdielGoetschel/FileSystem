@@ -69,7 +69,7 @@ class Parser:
 
     def get_input(self, current_dir: str) -> Union[Tuple[None, None], Tuple[Dict[str, Union[str, bool]], str]]:
         # The function gets the user input, parses the input string, and creates a dictionary of command arguments
-        input_string = input(f"Current directory: {current_dir}\n" "Enter a command: ")  # Get user input for command
+        input_string = input(f"[{current_dir}]$ ")  # Get user input for command
 
         if not input_string:
             return None, None
