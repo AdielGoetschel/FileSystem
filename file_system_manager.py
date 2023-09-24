@@ -1,10 +1,23 @@
+import math
+import os
 from dataclasses import dataclass
+import time
+from datetime import datetime
 
 from path_handler import PathHandler
 from tree_node import TreeNode
 from error_messages import ErrorMessages
 from typing import Dict, List, TypedDict, Union, Callable, Type
+import numpy as np
+import json
 
+MEM_SIZE = 2 * 1024 * 1024
+MAX_MEM_SIZE = 4 * 2 * 1024 * 1024
+DEFAULT_FILE_SIZE = 10
+MAX_FILE_SIZE = 100
+
+JSON_FILE = "filesystem.json"
+NUMPY_FILE = "numpy_data.npy"
 """
 The FileSystemManager acts as a guide for users, helping them navigate and manipulate the file system
 using the PathHandler for paths and the TreeNode for files and directories.
@@ -40,7 +53,16 @@ class FileSystemManager:
         return cls._instance
 
     def __init__(self):
-        self.path_handler: PathHandler = PathHandler()
+        if not os.path.exists(JSON_FILE) or not os.path.exists(NUMPY_FILE):
+            self.path_handler: PathHandler = PathHandler(create_root=True)
+            self.memory_buffer = np.empty(dtype=np.int8, shape=(MEM_SIZE,))
+            self.buffer_size = MEM_SIZE
+            self.next_available_end_buffer_index = 0  # Track the current used length
+            self.allocation_available = []
+        else:
+            self.path_handler: PathHandler = PathHandler(create_root=False)
+            self.restore_backup()
+
         """
         dict of commands: in the list for each command:
             command function
@@ -51,33 +73,35 @@ class FileSystemManager:
         self.command_mappings: CommandMappingType = {
             "create": CommandLayout(
                 self.create_file_or_dir,
-                {"name": "", "content": "", "recursive": False},
+                {"name": "", "file": False, "content": "", "recursive": False},
                 ["name"],
                 {
                     "command": "Create a new directory or file.",
                     "name": "Name of the directory or file to be created.",
                     "content": "(optional): Content to be written in the file.",
-                    "recursive": "(optional): Create directories recursively (true/false)."
+                    "recursive": "(optional, default: False): Create directories recursively (true/false).",
+                    "file": "(optional, default: False): Create file(true/false)."
+
                 }
         ),
             "read": CommandLayout(
                 self.read_file,
-                {"filename": ""},
-                ["filename"],
+                {"name": ""},
+                ["name"],
                 {
                     "command": "Read and display the content of a file.",
-                    "filename": "Name of the file to be read."
+                    "name": "Name of the file to be read."
                 }
             ),
             "write": CommandLayout(
                 self.write_to_file,
-                {"filename": "", "content": "", "append": True},
-                ["filename", "content"],
+                {"name": "", "content": "", "append": True},
+                ["name", "content"],
                 {
                     "command": "Write content to a file.",
-                    "filename": "Name of the file to write to.",
+                    "name": "Name of the file to write to.",
                     "content": "Content to be written.",
-                    "append": "(optional): Append to the file (true/false)."
+                    "append": "(optional, default: True): Append to the file (true/false)."
                 }
             ),
             "delete": CommandLayout(
@@ -97,7 +121,7 @@ class FileSystemManager:
                     "command": "Copy a file or directory to a new location.",
                     "source_path": "Path of the source file or directory.",
                     "destination_path": "Path of the destination directory.",
-                    "recursive": "(optional): Copy recursively (true/false)."
+                    "recursive": "(optional, default: False): Copy recursively (true/false)."
                 }
             ),
             "move": CommandLayout(
@@ -108,64 +132,64 @@ class FileSystemManager:
                     "command": "Move a file or directory to a new location.",
                     "source_path": "Path of the source file or directory.",
                     "destination_path": "Path of the destination directory.",
-                    "recursive": "(optional): Move recursively (true/false)."
+                    "recursive": "(optional, default: False): Move recursively (true/false)."
                 }
             ),
             "list": CommandLayout(
                 self.display_directory_content,
-                {"directory_name": "", "recursive": False},
-                ["directory_name"],
+                {"name": "", "recursive": False},
+                ["name"],
                 {
                     "command": "List the content of a directory.",
-                    "directory_name": "Name of the directory to list.",
-                    "recursive": "(optional): List recursively (true/false)."
+                    "name": "Name of the directory to list.",
+                    "recursive": "(optional, default: False): List recursively (true/false)."
                 }
             ),
             "size": CommandLayout(
                 self.get_file_size,
-                {"filename": ""},
-                ["filename"],
+                {"name": ""},
+                ["name"],
                 {
                     "command": "Get the size of a file in bytes.",
-                    "filename": "Name of the file."
+                    "name": "Name of the file."
                 }
             ),
             "permissions": CommandLayout(
                 self.get_file_permissions,
-                {"filename": ""},
-                ["filename"],
+                {"name": ""},
+                ["name"],
                 {
                     "command": "Get the permissions of a file.",
-                    "filename": "Name of the file."
+                    "name": "Name of the file."
                 }
             ),
             "set_permissions": CommandLayout(
                 self.set_file_permissions,
-                {"filename": "", "permission": "", "add": ""},
-                ["filename", "permission", "add"],
+                {"name": "", "permission": "", "add": ""},
+                ["name", "permission", "add"],
                 {
                     "command": "Set the permissions of a file.",
-                    "filename": "Name of the file.",
+                    "name": "Name of the file.",
                     "permission": "Permission to set.",
                     "add": "Add the permission (true/false)."
                 }
             ),
             "creation_time": CommandLayout(
                 self.get_creation_time,
-                {"filename": ""},
-                ["filename"],
+                {"name": ""},
+                ["name"],
                 {
                     "command": "Get the creation time of a file.",
-                    "filename": "Name of the file."
+                    "name": "Name of the file."
                 }
             ),
             "last_modification_time": CommandLayout(
                 self.get_last_modified_time,
-                {"filename": ""},
-                ["filename"],
+                {"name": ""},
+                ["name"],
                 {
                     "command": "Get the last modification time of a file.",
-                    "filename": "Name of the file."
+                    "name": "Name of the file."
                 }
             ),
             "search": CommandLayout(
@@ -185,11 +209,11 @@ class FileSystemManager:
             ),
             "change_current_directory": CommandLayout(
                 self.update_current_dir,
-                {"directory": ""},
-                ["directory"],
+                {"name": ""},
+                ["name"],
                 {
                     "command": "Change the current working directory.",
-                    "directory": "Directory to change to."
+                    "name": "Directory to change to."
                 }
             ),
             "go_to_previous_directory": CommandLayout(
@@ -199,22 +223,91 @@ class FileSystemManager:
                 {
                     "command": "Change the current working directory to the previous directory."
                 }),
+            "quit": CommandLayout(
+                lambda: True,
+                {},
+                [],
+                {
+                    "command": "Quit the program."
+                }),
         }
+
+
 
     def get_command_from_name(self, command_name: str) -> callable:
         return self.command_mappings[command_name].cb
 
-    def _create_file_or_dir(self, new_name: str, parent_node: TreeNode, content: str = "") -> TreeNode:
+    def allocate_memory_buffer(self, file_node: TreeNode) -> bool:
+        # Allocate memory for a file
+        # Check if the file has reached the maximum allowed memory allocations
+        if file_node.file_memory_allocations:
+            count_allocations = len(file_node.file_memory_allocations)
+            if count_allocations == MAX_FILE_SIZE // DEFAULT_FILE_SIZE:
+                print(f"{ErrorMessages.ExceedsMaxMemoryFileError.value}{file_node.name}")
+                return False
+        # Check if there is available memory space
+        if not self.allocation_available:
+            # If there's no available space, calculate the start and end indexes for memory allocation
+            start_index = self.next_available_end_buffer_index
+            end_index = start_index + DEFAULT_FILE_SIZE
+            # Check if the memory allocation exceeds the memory buffer size
+            if end_index > self.buffer_size:
+                if end_index > MAX_MEM_SIZE:
+                    # If the allocation exceeds the maximum memory size, return an error message
+                    print(ErrorMessages.ExceedsMaxSizeError.value)
+                    return False
+                else:
+                    # If the allocation smaller than the max buffer size allowed but exceeds the buffer size, expand the buffer
+                    # by creating a new memory buffer with doubled size
+                    new_memory_buffer = np.empty(dtype=np.int8, shape=(self.buffer_size * 2,))
+                    new_memory_buffer[:self.buffer_size] = self.memory_buffer
+                    self.memory_buffer = new_memory_buffer
+            new_allocation = True
+        else:
+            # If there are available memory allocations, use the first one
+            free_indexes = self.allocation_available.pop(0)
+            start_index, end_index = free_indexes
+            new_allocation = False
+
+        # Add the memory allocation information to the file node
+        file_node.file_memory_allocations.append([start_index, end_index, 0])
+        if new_allocation:
+            # Update the buffer index to point to the next available space in the buffer
+            self.next_available_end_buffer_index += DEFAULT_FILE_SIZE
+        return True
+
+    def delete_memory_buffer(self, file_node: TreeNode) -> bool:
+        # frees memory space previously allocated to a file and marks the allocated
+        # memory blocks as available for future use.
+        if not file_node.file_memory_allocations:
+            # If there are no memory allocations for the file, return True (nothing to delete)
+            return True
+        else:
+            while file_node.file_memory_allocations:
+                # Iterate through the file's memory allocations and release the memory
+                start_index, end_index, _ = file_node.file_memory_allocations.pop(0)
+                # Set the memory block to 0 (freeing the memory)
+                self.memory_buffer[start_index:end_index] = 0
+                # Mark the released memory block as available for future use
+                self.allocation_available.append([start_index, end_index])
+            return True
+
+    def _create_file_or_dir(self, new_name: str, parent_node: TreeNode, file: bool = False, content: str = "") -> Union[bool, TreeNode]:
         # Create a new directory or file node and add it as a child to the parent node
-        is_file = self.path_handler.is_file(new_name)
+        is_file = file
         new_node = TreeNode(new_name, is_file)
         parent_node.add_child(new_node)
         if is_file and content:
-            new_node.write_content(content)
+            write_success = self.write_to_file(new_node, content, append=False)
+            if not write_success:
+                return False
         return new_node
 
-    def create_file_or_dir(self, name: str, content: str = "", recursive: bool = False) -> bool:
+    def create_file_or_dir(self, name: str, file: bool = False, content: str = "", recursive: bool = False) -> bool:
         # Create a directory or a file with the given content
+        if content and not file:
+            print(f"{ErrorMessages.IsADirectoryError.value}Cannot write to a directory")
+            return False
         parent_path, new_name = self.path_handler.split_path(name)
         parent_node = self.path_handler.get_node_by_path(parent_path, show_errors=False)
         if parent_node:
@@ -229,8 +322,11 @@ class FileSystemManager:
                     print(f"{parent_path}/{new_name}{ErrorMessages.ExistsError.value}")
                     return False
                 else:  # create the new node
-                    self._create_file_or_dir(new_name, parent_node, content)
-                    return True
+                   result = self._create_file_or_dir(new_name, parent_node, file, content)
+                   if isinstance(result, TreeNode):
+                       return True
+                   else:
+                       return False
         else:  # if the parent of the new node does not exist
             if not recursive:
                 # The parent directory must exist for non-recursive creation
@@ -250,28 +346,47 @@ class FileSystemManager:
                         current_node = new_node
                     else:
                         if i == len(path_components) - 1:
-                            new_node = self._create_file_or_dir(path_components[i], current_node, content)
-                            return True
-                        else:
-                            if self.path_handler.is_file(path_components[i]):
-                                # the parent node should be a path, not a file
-                                print(
-                                    f"{ErrorMessages.InvalidPath.value}{name}. The parent node should be a path, not a file")
-                                return False
+                            result = self._create_file_or_dir(path_components[i], current_node, file, content)
+                            if isinstance(result, TreeNode):
+                                return True
                             else:
-                                new_node = self._create_file_or_dir(path_components[i], current_node, content)
-                                current_node = new_node
+                                return False
+                        else:
+                            result = self._create_file_or_dir(path_components[i], current_node)
+                            current_node = result
         return False
 
-    def read_file(self, filename: str) -> bool:
+    def read_file(self, name: Union[TreeNode, str], print_text=True) -> Union[bool, str]:
         # Read and return the content of a file
-        file_node = self.path_handler.get_node_by_path(filename, show_errors=True)
+        if isinstance(name, TreeNode):
+            file_node = name
+        else:
+            file_node = self.path_handler.get_node_by_path(name, show_errors=True)
         if not file_node:
             return False
         if file_node.is_file:
             if file_node.get_permissions()["read"]:
-                print(file_node.read_content())
-                return True
+                if file_node.file_memory_allocations:
+                    # Check if the file has allocations
+                    content = bytearray()  # Initialize an empty bytearray for the content
+                    for allocation in file_node.file_memory_allocations:
+                        start_index, end_index, used_range = allocation
+                        # Calculate the length of content in this allocation block
+                        content_length = used_range
+                        # Retrieve content from the memory buffer
+                        content.extend(self.memory_buffer[start_index:start_index + content_length])
+                    # Decode the content from bytes to string using utf-8 encoding
+                    if print_text:
+                        print(bytes(content).decode("utf-8"))
+                        return True
+                    else:
+                        return bytes(content).decode("utf-8")
+                else:
+                    if print_text:
+                        print("")
+                        return True
+                    else:
+                        return ""
             else:
                 print(f"{ErrorMessages.ReadPermissionError.value}")
                 return False
@@ -279,18 +394,53 @@ class FileSystemManager:
             print(f"{ErrorMessages.IsADirectoryError.value}Cannot read a directory")
             return False
 
-    def write_to_file(self, filename: str, content: str, append: bool = True) -> bool:
+    def write_to_file(self, name: Union[TreeNode, str], content: str, append: bool = True) -> bool:
         # Write content to a file
-        file_node = self.path_handler.get_node_by_path(filename, show_errors=True)
+        if isinstance(name, TreeNode):
+            file_node = name
+        else:
+            file_node = self.path_handler.get_node_by_path(name, show_errors=True)
         if not file_node:
             return False
         if file_node.is_file:
             if file_node.get_permissions()["write"]:
-                if append:
-                    file_node.write_content(content, mode="a")
+                if not append:
+                    self.delete_memory_buffer(file_node)
+                content_length = len(content)
+                # Check if the file has an allocation, if not, allocate memory
+                if not file_node.file_memory_allocations:
+                    allocation_success = self.allocate_memory_buffer(file_node)
+                    if not allocation_success:
+                        return False
+                # Retrieve the last allocated block's information
+                last_allocated_ranges = file_node.file_memory_allocations[-1]
+                start_index, end_index, used_range = last_allocated_ranges
+                available_space = end_index - start_index - used_range
+                new_start_index = start_index + used_range
+                if content_length <= available_space:
+                    # Content fits within the available space
+                    self.memory_buffer[new_start_index:new_start_index + content_length] = bytearray(content,
+                                                                                                                   "utf-8")
+                    file_node.file_memory_allocations[-1] = [start_index, end_index,
+                                                        used_range + content_length]
+                    return True
                 else:
-                    file_node.write_content(content, mode="w")
-                return True
+                    if available_space > 0:
+                        self.memory_buffer[new_start_index:new_start_index + available_space] = bytearray(
+                            content[:available_space], "utf-8")
+                        file_node.file_memory_allocations[-1] = [start_index, end_index,
+                                                            used_range + available_space]
+                        updated_content = content[available_space:]
+                        content_length = len(updated_content)
+                    else:
+                        updated_content = content
+                    new_blocks_count = math.ceil(content_length / DEFAULT_FILE_SIZE)
+                    for i in range(int(new_blocks_count)):
+                        allocation_success = self.allocate_memory_buffer(file_node)
+                        if not allocation_success:
+                            return False
+                        self.write_to_file(file_node, updated_content[DEFAULT_FILE_SIZE * i:DEFAULT_FILE_SIZE * (i + 1)], append=True)
+                    return True
             else:
                 print(f"{ErrorMessages.WritePermissionError.value}")
                 return False
@@ -299,98 +449,163 @@ class FileSystemManager:
             return False
 
     def delete_file_or_dir(self, name: str) -> bool:
-        # Delete a file
+        # Delete a file or a directory
         parent_dir_path, name_to_del = self.path_handler.split_path(name)
         parent_dir = self.path_handler.get_node_by_path(parent_dir_path, show_errors=True)
+        node_to_del = self.path_handler.get_node_by_path(name, show_errors=True)
         if not parent_dir:
+            # If the parent directory does not exist, cannot delete
             return False
         else:
             if not parent_dir.is_file:
+                if node_to_del.is_file:
+                    # If the node to be deleted is a file, delete its memory buffer
+                    self.delete_memory_buffer(node_to_del)
+                else:
+                    # If the node to be deleted is a directory, recursively delete its contents
+                    for child in node_to_del.children.copy():
+                        child_path = f"{parent_dir_path}/{name_to_del}/{child.name}" if parent_dir_path != "/" \
+                                    else f"/{name_to_del}/{child.name}"
+                        self.delete_file_or_dir(child_path)
+                # Remove the node to be deleted from the parent directory
                 result = parent_dir.remove_child(name_to_del)
                 if result:
                     return True
                 else:
-                    if self.path_handler.is_file(name_to_del):
-                        print(f"{ErrorMessages.FileNotFoundError.value}{parent_dir_path}/{name_to_del}")
-                    else:
-                        print(f"{ErrorMessages.DirectoryNotFoundError.value}{parent_dir_path}/{name_to_del}")
+                    print(f"{ErrorMessages.DirectoryNotFoundError.value}{parent_dir_path}/{name_to_del}")
                     return False
 
             else:
                 print(f"{ErrorMessages.InvalidPath.value}{name}The parent node should be a path, not a file")
                 return False
 
-    def copy_file_or_dir(self, source_path: str, destination_path: str, recursive: bool = False) -> bool:
+    def copy_file_or_dir(self, source_path: str, destination_path: str, recursive: bool = False, first_run: bool = True) -> bool:
+        # Copy a file or directory from the source path to the destination path.
         source_dir_node = self.path_handler.get_node_by_path(source_path, show_errors=True)
         if not source_dir_node:
+            # The source path does not exist, cannot copy
+            print(f"ErrorMessages.InvalidPath.value{source_path}")
             return False
         if source_dir_node.is_file:
             # if source is a file - copy it
-            if self.path_handler.is_file(destination_path):
-                new_des_path = destination_path
-            else:
-                filename = self.path_handler.split_path(source_path)[1]
-                new_des_path = f"{destination_path}/{filename}"
-            des = self.path_handler.get_node_by_path(new_des_path, show_errors=False)
-            if not des:  # if the destination file does not exist - create it
-                return self.create_file_or_dir(new_des_path, content=source_dir_node.read_content(),
+            destination_node = self.path_handler.get_node_by_path(destination_path, show_errors=False)
+            if not destination_node: # if the destination file does not exist - create it
+                return self.create_file_or_dir(destination_path, file=True, content=self.read_file(source_dir_node, print_text=False),
                                                recursive=True)
-            else:  # if the destination file exist - write the content of the source file
-                des.write_content(data=source_dir_node.read_content(), mode="w")
-                return True
+            else:
+                if destination_node.is_file: # if the destination file exist - write the content of the source file
+                    return self.write_to_file(destination_node, content=self.read_file(source_dir_node, print_text=False),
+                                              append=False)
+                else: #  if the destination directory exist - create the file on this directory
+                    filename = self.path_handler.split_path(source_path)[1]
+                    new_des_path = f"{destination_path}/{filename}" if destination_path != "/" \
+                                    else f"/{destination_path}"
+                    return self.create_file_or_dir(new_des_path, file=True,
+                                                   content=self.read_file(source_dir_node, print_text=False),
+                                                   recursive=True)
 
         else:  # if the source is a directory
-            if not self.path_handler.is_file(destination_path):
-                des = self.path_handler.get_node_by_path(destination_path, show_errors=False)
-                if not des:  # if the destination directory does not exist - create it
-                    result = self.create_file_or_dir(destination_path, recursive=True)
-                    if not result:
-                        return False
-                if recursive:
-                    # Copy files and directories recursively from the source to the destination if recursive is True
-                    for child in source_dir_node.children:
-                        child_source_path = f"{source_path}/{child.name}"
-                        new_destination_path = f"{destination_path}/{child.name}"
-                        result = self.copy_file_or_dir(child_source_path, new_destination_path, recursive=True)
-                        if not result:
-                            return False
-                return True
+            destination_node = self.path_handler.get_node_by_path(destination_path, show_errors=False)
+            if isinstance(destination_node, TreeNode):
+                # Ensure the destination is not a file (directories should be copied to directories)
+                if destination_node.is_file:
+                    print(
+                        f"{ErrorMessages.InvalidPath.value}{destination_path} the destination path should a directory format")
+                    return False
             else:
-                print(
-                    f"{ErrorMessages.InvalidPath.value}{destination_path} the destination path should a directory format")
-                return False
+                # if the destination directory does not exist - create it
+                result = self.create_file_or_dir(destination_path, file=False, recursive=True)
+                if not result:
+                    return False
+            if first_run:
+                copy_dir_name = self.path_handler.split_path(source_path)[1]
+                new_des_copy_path = f"{destination_path}/{copy_dir_name}" if destination_path != "/" \
+                                           else f"/{copy_dir_name}"
+                new_des_copy_node = self.create_file_or_dir(new_des_copy_path, file=False)
+            else:
+                new_des_copy_path = destination_path
+            # Copy files and directories recursively from the source to the destination if recursive is True
+            for child in source_dir_node.children:
+                child_source_node = source_dir_node.get_child_by_name(child.name)
+                child_source_path = f"{source_path}/{child.name}" if source_path != "/" \
+                                    else f"/{child.name}"
+                new_destination_path = f"{new_des_copy_path}/{child.name}" if destination_path != "/" \
+                                       else f"/{child.name}"
+                if child_source_node.is_file:
+                    result = self.copy_file_or_dir(child_source_path, new_destination_path, recursive=True)
+                else:
+                    if not recursive:
+                        result = self.create_file_or_dir(new_destination_path, file=False)
+                    else:
+                        result = self.copy_file_or_dir(child_source_path, new_destination_path, recursive=True, first_run=False)
+
+                if not result:
+                    return False
+            return True
+
 
     def move_file_or_dir(self, source_path: str, destination_path: str, recursive: bool = False) -> bool:
-        # Copy from source to destination
-        copy_success = self.copy_file_or_dir(source_path, destination_path, recursive)
-        if not copy_success:
+        source_dir_node = self.path_handler.get_node_by_path(source_path, show_errors=True)
+        if not source_dir_node:
+            # The source path does not exist, cannot copy
+            print(f"ErrorMessages.InvalidPath.value{source_path}")
             return False
+        if source_dir_node.is_file:
+            old_parent_node = self.path_handler.get_node_by_path(self.path_handler.split_path(source_path)[0])
+            destination_node = self.path_handler.get_node_by_path(destination_path, show_errors=False)
+            if isinstance(destination_node, TreeNode) and destination_node.is_file:
+                # if the destination is an exist file - write the content of the source file and delete the source
+                self.write_to_file(destination_node, content=self.read_file(source_dir_node, print_text=False),
+                                   append=False)
+                return self.delete_file_or_dir(source_path)
+            else:
+                # if the destination is an exist directory or a new directory
+                if not isinstance(destination_node, TreeNode):
+                    # if the destination directory does not exist - create the directory
+                    self.create_file_or_dir(destination_path, file=False, recursive=True)
+                new_parent_node = self.path_handler.get_node_by_path(destination_path)
+                new_parent_node.add_child(source_dir_node)
+                return old_parent_node.remove_child(source_dir_node.name)
 
-        # Delete the original from the source
-        if self.path_handler.is_file(source_path):  # delete the source file
-            delete_success = self.delete_file_or_dir(source_path)
-        else:  # delete the content of the source directory (and not the directory)
-            source_node = self.path_handler.get_node_by_path(source_path, show_errors=False)
-            delete_success = source_node.remove_all_children()
-        return delete_success
+        else:  # if the source is a directory
+            destination_node = self.path_handler.get_node_by_path(destination_path, show_errors=False)
+            if isinstance(destination_node, TreeNode):
+                if destination_node.is_file:
+                    print(
+                        f"{ErrorMessages.InvalidPath.value}{destination_path} the destination path should a directory format")
+                    return False
+            else:
+                # if the destination directory does not exist - create it
+                self.create_file_or_dir(destination_path, file=False, recursive=True)
+                destination_node = self.path_handler.get_node_by_path(destination_path, show_errors=False)
+            source_parent_path, source_dir_name = self.path_handler.split_path(source_path)
+            if recursive:
+                old_parent_node = self.path_handler.get_node_by_path(source_parent_path)
+                dir_to_move = old_parent_node.get_child_by_name(source_dir_name)
+                destination_node.add_child(dir_to_move)
+                old_parent_node.remove_child(source_dir_name)
+            else:
+                self.create_file_or_dir(name=f"{destination_path}/{source_dir_name}", file=False)
+            return True
 
-    def display_directory_content(self, directory_name: str, recursive: bool = False, indent: int = 0) -> bool:
+
+    def display_directory_content(self, name: str, recursive: bool = False, indent: int = 0) -> bool:
         # Display the content of a directory
-        if directory_name == ".":
+        if name == ".":
             dir_node = self.path_handler.get_node_by_path(self.path_handler.current_directory)
-            directory_name = self.path_handler.current_directory
+            name = self.path_handler.current_directory
         else:
-            dir_node = self.path_handler.get_node_by_path(directory_name, show_errors=True)
+            dir_node = self.path_handler.get_node_by_path(name, show_errors=True)
         if not dir_node:
             return False
         elif dir_node.is_file:
-            print(f"{ErrorMessages.InvalidPath.value}{directory_name} the path should a directory and not a file")
+            print(f"{ErrorMessages.InvalidPath.value}{name} the path should a directory and not a file")
             return False
         else:
             print(f"{'    ' * indent}└── {dir_node.name}")
             for child in dir_node.children:
                 if recursive and not child.is_file:
-                    self.display_directory_content(f"{directory_name}/{child.name}", recursive=True, indent=indent + 1)
+                    self.display_directory_content(f"{name}/{child.name}", recursive=True, indent=indent + 1)
                 else:
                     if child.is_file:
                         print(f"{'    ' * (indent + 1)}├── {child.name}")
@@ -398,9 +613,9 @@ class FileSystemManager:
                         print(f"{'    ' * (indent + 1)}└── {child.name}")
             return True
 
-    def get_file_size(self, filename: str) -> bool:
+    def get_file_size(self, name: str) -> bool:
         # get the size of the file in bytes
-        file_node = self.path_handler.get_node_by_path(filename, show_errors=True)
+        file_node = self.path_handler.get_node_by_path(name, show_errors=True)
         if not file_node:
             return False
         elif file_node.is_file:
@@ -410,9 +625,9 @@ class FileSystemManager:
             print(f"{ErrorMessages.IsADirectoryError.value}Cannot get size of a directory")
             return False
 
-    def get_creation_time(self, filename: str) -> bool:
+    def get_creation_time(self, name: str) -> bool:
         # get the creation time of the file
-        file_node = self.path_handler.get_node_by_path(filename, show_errors=True)
+        file_node = self.path_handler.get_node_by_path(name, show_errors=True)
         if not file_node:
             return False
         elif file_node.is_file:
@@ -422,9 +637,9 @@ class FileSystemManager:
             print(f"{ErrorMessages.IsADirectoryError.value}Cannot get creation time of a directory")
             return False
 
-    def get_last_modified_time(self, filename: str) -> bool:
+    def get_last_modified_time(self, name: str) -> bool:
         # get the last modification time of a file
-        file_node = self.path_handler.get_node_by_path(filename, show_errors=True)
+        file_node = self.path_handler.get_node_by_path(name, show_errors=True)
         if not file_node:
             return False
         elif file_node.is_file:
@@ -434,9 +649,9 @@ class FileSystemManager:
             print(f"{ErrorMessages.IsADirectoryError.value}Cannot get  last modification time of a directory")
             return False
 
-    def get_file_permissions(self, filename: str) -> bool:
+    def get_file_permissions(self, name: str) -> bool:
         # get the file permissions
-        file_node = self.path_handler.get_node_by_path(filename, show_errors=True)
+        file_node = self.path_handler.get_node_by_path(name, show_errors=True)
         if not file_node:
             return False
         elif file_node.is_file:
@@ -449,9 +664,9 @@ class FileSystemManager:
             print(f"{ErrorMessages.IsADirectoryError.value}Cannot get permissions of a directory")
             return False
 
-    def set_file_permissions(self, filename: str, permission: str, add: bool) -> bool:
+    def set_file_permissions(self, name: str, permission: str, add: bool) -> bool:
         # set the file permissions
-        file_node = self.path_handler.get_node_by_path(filename, show_errors=True)
+        file_node = self.path_handler.get_node_by_path(name, show_errors=True)
         if not file_node:
             return False
         elif file_node.is_file:
@@ -465,19 +680,20 @@ class FileSystemManager:
         # show current directory
         return self.path_handler.current_directory
 
-    def update_current_dir(self, directory: str) -> bool:
+    def update_current_dir(self, name: str) -> bool:
         # change the current working directory
-        if self.path_handler.is_file(directory):
-            print(f"{ErrorMessages.InvalidPath.value}{directory}"
+        exist_dir = self.path_handler.get_node_by_path(name, show_errors=True)
+        if not isinstance(exist_dir, TreeNode):
+            print(f"{ErrorMessages.DirectoryNotFoundError}{name}")
+            return False
+        elif exist_dir.is_file:
+            print(f"{ErrorMessages.InvalidPath.value}{name}"
                   f" The new current directory should be a path, not a file")
             return False
-        exist_dir = self.path_handler.get_node_by_path(directory, show_errors=True)
-        if not exist_dir:
-            return False
-        elif self.path_handler.is_absolute_path(directory):
-            self.path_handler.change_current_dir(directory)
+        elif self.path_handler.is_absolute_path(name):
+            self.path_handler.change_current_dir(name)
         else:
-            self.path_handler.change_current_dir(f"{self.path_handler.current_directory}/{directory}")
+            self.path_handler.change_current_dir(f"{self.path_handler.current_directory}/{name}")
         return True
 
     def go_to_previous_dir(self) -> bool:
@@ -526,7 +742,7 @@ class FileSystemManager:
                     and (not min_size or current_node.size >= int(min_size))
                     and (not max_size or current_node.size <= int(max_size))
                     and (not search_filename or search_filename.lower() in current_node.name.lower())
-                    and (not search_content or search_content.lower() in current_node.read_content().lower())
+                    and (not search_content or search_content.lower() in self.read_file(current_node, print_text=False).lower())
             ):
                 results.append(current_node_path)
 
@@ -543,3 +759,74 @@ class FileSystemManager:
         dfs_search(search_node, start_path)
         self.output_search(results)
         return True
+
+    def recursive_tree_to_dict(self, node: TreeNode) -> dict:
+        # Convert the TreeNode hierarchy to a dictionary
+        node_dict = {
+            "name": node.name,
+            "is_file": node.is_file,
+        }
+        if node.is_file:
+            node_dict["last_modified"] = node.last_modified
+            node_dict["permissions"] = node.permissions
+            node_dict["creation_time"] = node.creation_time
+            node_dict["file_memory_allocations"] = node.file_memory_allocations
+        else:
+            node_dict["children"] = [self.recursive_tree_to_dict(child) for child in node.children]
+        return node_dict
+
+    def tree_to_dict(self, node: TreeNode):
+        # Create a dictionary to represent the entire tree, including general metadata
+        tree_dict = {
+            "metadata": {"buffer_size": self.buffer_size,
+                         "next_available_end_buffer_index": self.next_available_end_buffer_index,
+                         "allocation_available": self.allocation_available},
+            "root": self.recursive_tree_to_dict(node)
+        }
+        return tree_dict
+
+    def create_backup(self):
+        filesystem_dict = self.tree_to_dict(self.path_handler.root)
+        # Serialize the dictionary to JSON and save it to a file
+        with open(JSON_FILE, "w") as json_file:
+            json.dump(filesystem_dict, json_file, indent=4)
+        # Save the NumPy array to a file
+        np.save(NUMPY_FILE, self.memory_buffer)
+
+    def recursive_dict_to_tree(self, node_dict: Dict):
+        if not node_dict:
+            return None
+        node = TreeNode(node_dict["name"], node_dict["is_file"])
+        if node_dict["name"] == "/":
+            self.path_handler.root = node
+        if node_dict["is_file"]:
+            node.last_modified = node_dict.get("last_modified")
+            node.permissions = node_dict.get("permissions")
+            node.creation_time = node_dict.get("creation_time")
+            node.file_memory_allocations = node_dict.get("file_memory_allocations")
+        else:
+            node.children = [self. recursive_dict_to_tree(child_dict) for child_dict in node_dict.get("children", [])]
+        return node
+
+    def dict_to_tree(self, tree_dict: Dict):
+        if not tree_dict or "root" not in tree_dict:
+            return None
+        root_dict = tree_dict["root"]
+        metadata_dict = tree_dict["metadata"]
+        self.buffer_size = metadata_dict["buffer_size"]
+        self.next_available_end_buffer_index = metadata_dict["next_available_end_buffer_index"]
+        self.allocation_available = metadata_dict["allocation_available"]
+        self.recursive_dict_to_tree(root_dict)
+
+    def restore_backup(self):
+        # Load the JSON data from the file
+        with open(JSON_FILE, "r") as json_file:
+            filesystem_dict = json.load(json_file)
+        # Create the root node from the loaded data
+        self.dict_to_tree(filesystem_dict)
+
+        # Load the NumPy array from the file
+        self.memory_buffer = np.load(NUMPY_FILE)
+
+
+

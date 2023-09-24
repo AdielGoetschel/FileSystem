@@ -1,6 +1,15 @@
+import math
 import time
 from datetime import datetime
 from typing import Optional, Dict
+import numpy as np
+from error_messages import ErrorMessages
+
+MEM_SIZE = 2 * 1024 * 1024
+DEFAULT_FILE_SIZE = 10
+MAX_FILE_SIZE = 100
+
+
 
 """
 TreeNode represents a node in a file system hierarchy, capable of storing file or directory information.
@@ -12,21 +21,30 @@ class TreeNode:
     def __init__(self, name: str, is_file: bool):
         self.name = name
         self.is_file = is_file
-        self.children = []
-        self.content: Optional[bytearray] = None
         if is_file:
-            self.content = bytearray()  # Use bytearray to store the file content
             self.last_modified = time.time()  # Set current time as last modified time
             self.creation_time = time.time()
             self.permissions = {"read": True, "write": True}
+            self.file_memory_allocations: list = []
         else:
-            self.last_modified = None
-            self.permissions = None
+            self.children: list = []
 
     @property
     def size(self) -> int:
         # Get the size of the content
-        return len(self.content) if self.content is not None else 0
+
+        if self.is_file:
+            if self.file_memory_allocations:
+                # Check if the file has allocations
+                size_content = 0 # Initialize
+
+                for allocation in self.file_memory_allocations:
+                    start_index, end_index, used_range = allocation
+                    # Calculate the length of content in this allocation block
+                    size_content += used_range
+                return size_content
+            else:
+                return 0 # File not found in memory allocations
 
     def add_child(self, node: "TreeNode") -> None:
         # Add a child node to the given node
@@ -41,8 +59,9 @@ class TreeNode:
         return False
 
     def remove_all_children(self) -> bool:
-        # Remove a child node with the given name from the list of children
-        self.children = []
+        # Remove all children's
+        while self.children:
+            self.children.pop()
         return True
 
     def get_child_by_name(self, name: str) -> Optional["TreeNode"]:
@@ -70,22 +89,20 @@ class TreeNode:
             return self.permissions
         return None
 
-    def write_content(self, data: str, mode: str = "w") -> None:
-        """
-        Write content to the node.
 
-        Args:
-            data (str): Content to be written.
-            mode (str, optional): Write mode ('w' for overwrite, 'a' for append). Defaults to 'w'.
-        """
-        if self.is_file:
-            if mode == "w":
-                self.content = bytearray(data, "utf-8")  # Convert content to bytes using utf-8 encoding
-            elif mode == "a":
-                self.content += bytearray(data, "utf-8")
-            self.last_modified = time.time()  # Update last modified time
 
-    def read_content(self) -> str:
-        # Read and retrieve content from the node
-        if self.is_file:
-            return bytes(self.content).decode("utf-8")  # Convert bytes to string using utf-8 encoding
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -8,8 +8,9 @@ PathHandler manages file system paths.
 
 
 class PathHandler:
-    def __init__(self):
-        self.root = TreeNode("/", is_file=False)  # Create the root directory
+    def __init__(self, create_root=True):
+        if create_root:
+            self.root = TreeNode("/", is_file=False)  # Create the root directory
         self.current_directory = "/"
         self.previous_directory = None
 
@@ -74,14 +75,3 @@ class PathHandler:
         self.previous_directory = cur_dir
         return True
 
-    def is_file(self, path: str) -> bool:
-        # Check if the given path corresponds to a file.
-        if '/' in path:
-            components = path.split('/')
-            last_component = components[-1]
-        else:
-            last_component = path
-        if '.' in last_component:
-            return True
-        else:
-            return False
