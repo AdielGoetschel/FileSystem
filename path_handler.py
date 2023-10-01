@@ -10,7 +10,7 @@ PathHandler manages file system paths.
 class PathHandler:
     def __init__(self, create_root=True):
         if create_root:
-            self.root = TreeNode("/", is_file=False)  # Create the root directory
+            self.root = TreeNode("/", is_file=False, parent_node=None)  # Create the root directory
         self.current_directory = "/"
         self.previous_directory = None
 
@@ -36,31 +36,29 @@ class PathHandler:
         return parent_dir_path, file_or_dir_name
 
     def get_node_by_path(self, path: str, show_errors: bool = True) -> Union[TreeNode, bool]:
-        # Get the TreeNode corresponding to the given path
+        # Get the node corresponding to the given path
         if not path:
             return False
         elif path == "/":
             return self.root
-        elif self.is_absolute_path(path):  # start to search from the root node
+        elif self.is_absolute_path(path):
+            # Start searching from the root node
             current_node = self.root
         else:
+            # Start searching from the current node
             current_node = self.get_node_by_path(self.current_directory)   # start to search from the current node
         path_components = path.strip("/").split("/")
         for component in path_components:
             next_node = current_node.get_child_by_name(component)
             if not next_node:
                 if show_errors:   # show error if the node is not found.
-                    current_node_name = "" if current_node.name == "/" else current_node.name
-                    if self.is_file(component):
-                        print(f"{ErrorMessages.FileNotFoundError.value}{current_node_name}/{component}")
-                    else:
-                        print(f"{ErrorMessages.DirectoryNotFoundError.value}{current_node_name}/{component}")
+                    print(f"{ErrorMessages.DirectoryNotFoundError.value}{path}")
                 return False
             current_node = next_node
         return current_node
 
     def change_current_dir(self, new_cur_directory: str) -> bool:
-        # change the current working directory
+        # change the current working directory to the specified directory
         self.previous_directory = self.current_directory
         self.current_directory = new_cur_directory
         return True
@@ -74,4 +72,3 @@ class PathHandler:
         self.current_directory = self.previous_directory
         self.previous_directory = cur_dir
         return True
-
