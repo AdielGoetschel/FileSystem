@@ -1,53 +1,33 @@
-import math
 import time
 from datetime import datetime
-from typing import Optional, Dict
-import numpy as np
-from error_messages import ErrorMessages
-
+from typing import Optional, Dict, Union
 MEM_SIZE = 2 * 1024 * 1024
 DEFAULT_FILE_SIZE = 10
 MAX_FILE_SIZE = 100
 
-
-
 """
 TreeNode represents a node in a file system hierarchy, capable of storing file or directory information.
-It includes methods to manage and access properties such as content, permissions, and timestamps
+It includes methods to manage and access properties such as content, and timestamps
 """
 
 
 class TreeNode:
-    def __init__(self, name: str, is_file: bool):
-        self.name = name
-        self.is_file = is_file
+    def __init__(self, name: str, is_file: bool, parent_node: Union['TreeNode', None]):
+        self.name = name # Name of the node
+        self.is_file = is_file # True if it's a file, False if it's a directory
+        self.parent_node = parent_node
+        self.creation_time = time.time()
+        self.last_modified = time.time()  # Set current time as last modified time
+        self.size = 0
         if is_file:
-            self.last_modified = time.time()  # Set current time as last modified time
-            self.creation_time = time.time()
-            self.permissions = {"read": True, "write": True}
-            self.file_memory_allocations: list = []
+            # Initialize properties for files
+            self.file_memory_allocations: list = []  # List to track memory allocations for files
         else:
-            self.children: list = []
-
-    @property
-    def size(self) -> int:
-        # Get the size of the content
-
-        if self.is_file:
-            if self.file_memory_allocations:
-                # Check if the file has allocations
-                size_content = 0 # Initialize
-
-                for allocation in self.file_memory_allocations:
-                    start_index, end_index, used_range = allocation
-                    # Calculate the length of content in this allocation block
-                    size_content += used_range
-                return size_content
-            else:
-                return 0 # File not found in memory allocations
+            # Initialize properties for directories
+            self.children: list = []  # List to store child nodes (subdirectories or files)
 
     def add_child(self, node: "TreeNode") -> None:
-        # Add a child node to the given node
+        # Add a child node (subdirectory or file) to the current node
         self.children.append(node)
 
     def remove_child(self, child_name: str) -> bool:
@@ -56,10 +36,10 @@ class TreeNode:
             if child.name == child_name:
                 self.children.remove(child)
                 return True
-        return False
+        return False  # Child not found
 
     def remove_all_children(self) -> bool:
-        # Remove all children's
+        # Remove all child nodes (subdirectories and files) from the current directory node.
         while self.children:
             self.children.pop()
         return True
@@ -72,37 +52,15 @@ class TreeNode:
         return None
 
     def get_last_modified(self) -> Optional[str]:
-        # Get the last modification time of the node
+        # Get the last modification time of the node, Only applicable to files
         if self.is_file:
             return datetime.fromtimestamp(self.last_modified).strftime("%Y-%m-%d %H:%M:%S")
-        return None
+        return None  # Last modified time not applicable to directories
 
     def get_creation_time(self) -> Optional[str]:
-        # Get the creation time of the node
+        # Get the creation time of the node,   Only applicable to files.
         if self.is_file:
             return datetime.fromtimestamp(self.creation_time).strftime("%Y-%m-%d %H:%M:%S")
-        return None
-
-    def get_permissions(self) -> Optional[Dict[str, bool]]:
-        #  Get the permissions of the node
-        if self.is_file:
-            return self.permissions
-        return None
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return None  # Creation time not applicable to directories
 
 
