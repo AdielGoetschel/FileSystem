@@ -52,7 +52,7 @@ class PathHandler:
             next_node = current_node.get_child_by_name(component)
             if not next_node:
                 if show_errors:   # show error if the node is not found.
-                    print(f"{ErrorMessages.DirectoryNotFoundError.value}{path}")
+                    print(f"{ErrorMessages.NotFoundError.value}{path}")
                 return False
             current_node = next_node
         return current_node
@@ -66,7 +66,7 @@ class PathHandler:
     def go_back_dir(self) -> bool:
         # change the current working directory to the previous directory
         if not self.previous_directory:
-            print(f"{ErrorMessages.DirectoryNotFoundError.value}previous directory does not found")
+            print(f"{ErrorMessages.NotFoundError.value}previous directory does not found")
             return False
         cur_dir = self.current_directory
         self.current_directory = self.previous_directory
