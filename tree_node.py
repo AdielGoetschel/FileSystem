@@ -53,14 +53,10 @@ class TreeNode:
 
     def get_last_modified(self) -> Optional[str]:
         # Get the last modification time of the node, Only applicable to files
-        if self.is_file:
-            return datetime.fromtimestamp(self.last_modified).strftime("%Y-%m-%d %H:%M:%S")
-        return None  # Last modified time not applicable to directories
+        return datetime.fromtimestamp(self.last_modified).strftime("%Y-%m-%d %H:%M:%S")
 
     def get_creation_time(self) -> Optional[str]:
         # Get the creation time of the node,   Only applicable to files.
-        if self.is_file:
-            return datetime.fromtimestamp(self.creation_time).strftime("%Y-%m-%d %H:%M:%S")
-        return None  # Creation time not applicable to directories
+        return datetime.fromtimestamp(self.creation_time).strftime("%Y-%m-%d %H:%M:%S")
 
 
