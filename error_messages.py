@@ -6,8 +6,7 @@ ErrorMessages is an class that provides descriptive error messages for various f
 
 
 class ErrorMessages(Enum):
-    FileNotFoundError = "File not found: "
-    DirectoryNotFoundError = "Directory not found: "
+    NotFoundError = "Not found: "
     InvalidPath = "Invalid path: "
     ExistsError = " already exists in the destination"
     IsADirectoryError = "IsADirectoryError: "
