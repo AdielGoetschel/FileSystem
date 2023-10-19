@@ -42,7 +42,7 @@ CommandMappingType: Type[Dict[str, CommandLayout]]
 class FileSystemManager:
     _instance = None
 
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         # create a new instance of a class
         if cls._instance is None:
             # if the singleton instance has not been created, create a new instance of the class
@@ -54,8 +54,8 @@ class FileSystemManager:
         # Return the existing singleton instance
         return cls._instance
 
-    def __init__(self):
-        if not os.path.exists(JSON_FILE) or not os.path.exists(NUMPY_FILE):
+    def __init__(self, check_for_backup_files=True):
+        if not check_for_backup_files or (not os.path.exists(JSON_FILE) or not os.path.exists(NUMPY_FILE)):
             self.path_handler: PathHandler = PathHandler(create_root=True)
             self.memory_buffer = np.empty(dtype=np.int8, shape=(MEM_SIZE,))
             self.buffer_size = MEM_SIZE
@@ -253,13 +253,11 @@ class FileSystemManager:
     def get_command_from_name(self, command_name: str) -> callable:
         return self.command_mappings[command_name].cb
 
-    def get_success_message_from_name(self, command_name: str) -> callable:
+    def get_success_message_from_name(self, command_name: str) -> str:
         return self.command_mappings[command_name].success_message
 
-    def get_failure_message_from_name(self, command_name: str) -> callable:
+    def get_failure_message_from_name(self, command_name: str) -> str:
         return self.command_mappings[command_name].failure_message
-
-
 
     def allocate_memory_buffer(self, file_node: TreeNode) -> bool:
         # Allocate memory for a file
@@ -288,6 +286,7 @@ class FileSystemManager:
                     new_memory_buffer = np.empty(dtype=np.int8, shape=(self.buffer_size * 2,))
                     new_memory_buffer[:self.buffer_size] = self.memory_buffer
                     self.memory_buffer = new_memory_buffer
+                    self.buffer_size *= 2
             new_allocation = True
         else:
             # If there are available memory allocations, use the first one
@@ -378,7 +377,7 @@ class FileSystemManager:
         parent_node = self.path_handler.get_node_by_path(parent_path, show_errors=False)
         if parent_node:
             if parent_node.is_file:  # the parent node should be a path, not a file
-                print(f"{ErrorMessages.InvalidPath.value}{name} The parent node should be a path, not a file")
+                print(f"{ErrorMessages.InvalidPath.value}{name} The parent node should be a directory, not a file")
                 return False
             else:
                 # Check if a node with the same name already exists in the parent directory
@@ -396,7 +395,7 @@ class FileSystemManager:
         else:  # if the parent of the new node does not exist
             if not recursive:
                 # The parent directory must exist for non-recursive creation
-                print(f"{ErrorMessages.DirectoryNotFoundError.value}{parent_path}")
+                print(f"{ErrorMessages.NotFoundError.value}{parent_path}")
                 return False
 
             else:  # handle case of recursive creation
@@ -493,7 +492,8 @@ class FileSystemManager:
                 delta_file_size = self.update_file_size(file_node) - old_file_size
                 # Update the modification times and sizes of parent directories
                 # Starting from the parent node of the file
-                self.update_parents(node_to_start_to_update=file_node.parent_node, last_modification_time=last_modified_time, delta_size=delta_file_size)
+                self.update_parents(node_to_start_to_update=file_node.parent_node,
+                                    last_modification_time=last_modified_time, delta_size=delta_file_size)
                 return True
             else:
                 if available_space > 0:
@@ -525,46 +525,40 @@ class FileSystemManager:
         if not parent_dir:
             # If the parent directory does not exist, cannot delete
             return False
+        elif not node_to_del:
+            # If the node to delete does not exist, cannot delete
+            return False
         else:
-            if not parent_dir.is_file:
-                delta_size = 0
-                if node_to_del.is_file:
-                    # If the node to be deleted is a file, delete its memory buffer
-                    old_file_size = node_to_del.size
-                    self.delete_memory_buffer(node_to_del)
-                    delta_size = -old_file_size if old_file_size !=0 else 0
-                else:
-                    # If the node to be deleted is a directory, recursively delete its contents
-                    for child in node_to_del.children.copy():
-                        child_path = f"{parent_dir_path}/{name_to_del}/{child.name}" if parent_dir_path != "/" \
-                                    else f"/{name_to_del}/{child.name}"
-                        # Recursively call delete_file_or_dir to delete each child node
-                        self.delete_file_or_dir(child_path)
-                # Remove the node to be deleted from the parent directory
-                result = parent_dir.remove_child(name_to_del)
-                if result:
-                    last_modified_time = time.time()
-                    # Check if delta_size is non-zero, indicating a change in size
-                    if delta_size != 0:
-                        # If delta_size is not zero, update the parent directory's size and last modification time
-                        # and propagate the size change up the directory hierarchy
-                        self.update_parents(node_to_start_to_update=parent_dir,
-                                            last_modification_time=last_modified_time,
-                                            delta_size=delta_size)
-                    else:
-                        # If delta_size is zero, only update the parent directory's
-                        # last modification time without changing its size
-                        self.update_parents(node_to_start_to_update=parent_dir,
-                                            last_modification_time=last_modified_time)
-
-                    return True
-                else:
-                    print(f"{ErrorMessages.DirectoryNotFoundError.value}{parent_dir_path}/{name_to_del}")
-                    return False
-
+            delta_size = 0
+            if node_to_del.is_file:
+                # If the node to be deleted is a file, delete its memory buffer
+                old_file_size = node_to_del.size
+                self.delete_memory_buffer(node_to_del)
+                delta_size = -old_file_size if old_file_size !=0 else 0
             else:
-                print(f"{ErrorMessages.InvalidPath.value}{name}The parent node should be a path, not a file")
-                return False
+                # If the node to be deleted is a directory, recursively delete its contents
+                for child in node_to_del.children.copy():
+                    child_path = f"{parent_dir_path}/{name_to_del}/{child.name}" if parent_dir_path != "/" \
+                                else f"/{name_to_del}/{child.name}"
+                    # Recursively call delete_file_or_dir to delete each child node
+                    self.delete_file_or_dir(child_path)
+            # Remove the node to be deleted from the parent directory
+            parent_dir.remove_child(name_to_del)
+            last_modified_time = time.time()
+            # Check if delta_size is non-zero, indicating a change in size
+            if delta_size != 0:
+                # If delta_size is not zero, update the parent directory's size and last modification time
+                # and propagate the size change up the directory hierarchy
+                self.update_parents(node_to_start_to_update=parent_dir,
+                                    last_modification_time=last_modified_time,
+                                    delta_size=delta_size)
+            else:
+                # If delta_size is zero, only update the parent directory's
+                # last modification time without changing its size
+                self.update_parents(node_to_start_to_update=parent_dir,
+                                    last_modification_time=last_modified_time)
+            return True
+
 
     def copy_file_or_dir(self, source_path: str, destination_path: str, recursive: bool = False,
                          first_run: bool = True) -> bool:
@@ -572,7 +566,7 @@ class FileSystemManager:
         source_dir_node = self.path_handler.get_node_by_path(source_path, show_errors=True)
         if not source_dir_node:
             # The source path does not exist, cannot copy
-            print(f"ErrorMessages.InvalidPath.value{source_path}")
+            print(ErrorMessages.InvalidPath.value + source_path)
             return False
         if source_dir_node.is_file:
             # if source is a file - copy it
@@ -639,7 +633,7 @@ class FileSystemManager:
         source_dir_node = self.path_handler.get_node_by_path(source_path, show_errors=True)
         if not source_dir_node:
             # The source path does not exist, cannot move
-            print(f"ErrorMessages.InvalidPath.value{source_path}")
+            print(ErrorMessages.InvalidPath.value + source_path)
             return False
         if source_dir_node.is_file:
             # If the source is a file, handle moving it
@@ -677,9 +671,7 @@ class FileSystemManager:
                     print(f"{ErrorMessages.InvalidPath.value}{destination_path} "
                           f"the destination path should a directory format")
                     return False
-                else:
-                    print(f"{source_path}{ErrorMessages.ExistsError.value}")
-                    return False
+
             else:
                 # if the destination directory does not exist, create it
                 self.create_file_or_dir(destination_path, file=False, recursive=True)
@@ -769,7 +761,7 @@ class FileSystemManager:
         exist_dir = self.path_handler.get_node_by_path(name, show_errors=True)
         # Check if the new current directory exists
         if not isinstance(exist_dir, TreeNode):
-            print(f"{ErrorMessages.DirectoryNotFoundError}{name}")
+            print(f"{ErrorMessages.NotFoundError.value}{name}")
             return False
         elif exist_dir.is_file:
             print(f"{ErrorMessages.InvalidPath.value}{name}"
@@ -778,7 +770,10 @@ class FileSystemManager:
         elif self.path_handler.is_absolute_path(name):
             self.path_handler.change_current_dir(name)
         else:
-            self.path_handler.change_current_dir(f"{self.path_handler.current_directory}/{name}")
+            if self.path_handler.current_directory != "/":
+                self.path_handler.change_current_dir(f"{self.path_handler.current_directory}/{name}")
+            else:
+                self.path_handler.change_current_dir(f"/{name}")
         return True
 
     def go_to_previous_dir(self) -> bool:
@@ -866,7 +861,6 @@ class FileSystemManager:
         node_dict = {
             "name": node.name,
             "is_file": node.is_file,
-            "parent_node": node.parent_node,
             "last_modified": node.last_modified,
             "creation_time": node.last_modified,
             "size": node.size
@@ -900,11 +894,11 @@ class FileSystemManager:
             print(f"Backup creation failed: {e}")
             return False
 
-    def recursive_dict_to_tree(self, node_dict: Dict):
+    def recursive_dict_to_tree(self, node_dict: Dict, parent_node: TreeNode = None):
         # Recursively build a TreeNode hierarchy from a dictionary
         if not node_dict:
             return None
-        node = TreeNode(node_dict["name"], node_dict["is_file"], node_dict["parent_node"])
+        node = TreeNode(node_dict["name"], node_dict["is_file"], parent_node)
         if node_dict["name"] == "/":
             self.path_handler.root = node
         node.last_modified = node_dict.get("last_modified")
@@ -913,7 +907,9 @@ class FileSystemManager:
         if node_dict["is_file"]:
             node.file_memory_allocations = node_dict.get("file_memory_allocations")
         else:
-            node.children = [self. recursive_dict_to_tree(child_dict) for child_dict in node_dict.get("children", [])]
+            node.children = [self.recursive_dict_to_tree(child_dict, node) for child_dict in node_dict.get("children", [])]
+            for child_node in node.children:
+                child_node.parent_node = node
         return node
 
     def dict_to_tree(self, tree_dict: Dict):
