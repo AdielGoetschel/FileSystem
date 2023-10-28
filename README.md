@@ -3,10 +3,16 @@
 The File System is a command-line tool for managing a virtual file system. It allows you to create, read, write, delete, copy, move, and perform various operations on files and directories. This README provides an overview of the project and instructions on how to use it.
 
 ## Table of Contents
+- [Structure](#structure)
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Testing](#testing)
+
+## Structure
+A diagram that illustrates the structure and relationships of the classes:
+
+![img.png](diagram.png)
 
 ## Features
 
@@ -44,19 +50,18 @@ To use the File System Manager, you can run the `main.py` file. It provides a co
 2. Navigate to the directory where your project is located.
 
 3. Run the following command:
-
    ```bash
    python main.py
+   ```
+   You'll be prompted to enter commands to perform various file system operations.
 
-You'll be prompted to enter commands to perform various file system operations.
-
+4. - `help` Command: The "help" command provides a list of available commands with short explanations. It offers an overview of the actions you can perform in the File System.
+   - `command_name --help`: By appending --help to a specific command (e.g., `create --help`), you can access detailed information about that command, including its usage and arguments.
 ## Testing
 Unit tests for the File System are organized into separate test files for each class, as well as tests for the main file. These test files are located within the "tests" subdirectory. You can run all these tests using the following command:
 ```bash
 python -m unittest discover -s tests -p "test_*.py"
 ```
-
-
 
 
 
