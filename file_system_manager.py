@@ -62,14 +62,15 @@ class FileSystemManager:
 
     def __init__(self, check_for_backup_files=True):
         if not check_for_backup_files or (not os.path.exists(JSON_FILE) or not os.path.exists(NUMPY_FILE)):
-            self.path_handler: PathHandler = PathHandler(create_root=True)
+            self.root = TreeNode("/", is_file=False, parent_node=None)  # Create the root directory
+            self.path_handler: PathHandler = PathHandler(self.root)
             self.memory_buffer = np.empty(dtype=np.int8, shape=(MEM_SIZE,))
             self.buffer_size = MEM_SIZE
             self.next_available_end_buffer_index = 0  # Track the current used length
             self.allocation_available = []
         else:
-            self.path_handler: PathHandler = PathHandler(create_root=False)
             self.restore_backup()
+            self.path_handler: PathHandler = PathHandler(self.root)
 
         """
         dict of commands: for each command, includes:
@@ -406,7 +407,7 @@ class FileSystemManager:
 
             else:  # handle case of recursive creation
                 if name.startswith("/"):
-                    current_node = self.path_handler.root
+                    current_node = self.root
                 else:
                     current_node = self.path_handler.get_node_by_path(self.path_handler.current_directory,
                                                                       show_errors=False)
@@ -888,7 +889,7 @@ class FileSystemManager:
         return tree_dict
 
     def create_backup(self) -> bool:
-        filesystem_dict = self.tree_to_dict(self.path_handler.root)
+        filesystem_dict = self.tree_to_dict(self.root)
         # Serialize the dictionary to JSON and save it to a file
         try:
             with open(JSON_FILE, "w") as json_file:
@@ -906,7 +907,7 @@ class FileSystemManager:
             return None
         node = TreeNode(node_dict["name"], node_dict["is_file"], parent_node)
         if node_dict["name"] == "/":
-            self.path_handler.root = node
+            self.root = node
         node.last_modified = node_dict.get("last_modified")
         node.creation_time = node_dict.get("creation_time")
         node.size = node_dict.get("size")

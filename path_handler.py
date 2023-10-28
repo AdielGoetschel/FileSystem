@@ -8,9 +8,8 @@ PathHandler manages file system paths.
 
 
 class PathHandler:
-    def __init__(self, create_root=True):
-        if create_root:
-            self.root = TreeNode("/", is_file=False, parent_node=None)  # Create the root directory
+    def __init__(self, root: TreeNode):
+        self.root = root
         self.current_directory = "/"
         self.previous_directory = None
 

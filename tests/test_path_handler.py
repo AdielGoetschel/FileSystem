@@ -6,7 +6,8 @@ from path_handler import PathHandler
 class TestPathHandler(unittest.TestCase):
     def setUp(self):
         # Create an instance of the PathHandler class for testing
-        self.path_handler = PathHandler(create_root=True)
+        root = TreeNode("/", is_file=False, parent_node=None)
+        self.path_handler = PathHandler(root)
 
     def test_is_absolute_path(self):
         # Test case for is_absolute_path method

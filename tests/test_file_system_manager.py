@@ -381,8 +381,10 @@ class TestFileSystemManager(unittest.TestCase):
 
         # Use the dict_to_tree method to convert the dictionary back to a tree structure
         self.file_system_manager.dict_to_tree(tree_dict)
+        self.file_system_manager.path_handler.root = self.file_system_manager.root
 
-        root_node = self.file_system_manager.path_handler.root
+
+        root_node = self.file_system_manager.root
         child1_node = self.file_system_manager.path_handler.get_node_by_path(child1_path)
         file1_node = self.file_system_manager.path_handler.get_node_by_path(file1_path)
         child2_node = self.file_system_manager.path_handler.get_node_by_path(child2_path)
@@ -411,12 +413,13 @@ class TestFileSystemManager(unittest.TestCase):
         # Delete the file and restore from backup
         self.file_system_manager.delete_file_or_dir(file_name)
         self.file_system_manager.restore_backup()
+        self.file_system_manager.path_handler.root = self.file_system_manager.root
 
         # Verify that the TreeNode hierarchy is restored
-        self.assertEqual(len(self.file_system_manager.path_handler.root.children), 2)
-        self.assertEqual(self.file_system_manager.path_handler.root.children[0].name,
+        self.assertEqual(len(self.file_system_manager.root.children), 2)
+        self.assertEqual(self.file_system_manager.root.children[0].name,
                          self.file_system_manager.path_handler.split_path(file_name)[1])
-        self.assertEqual(self.file_system_manager.path_handler.root.children[1].name,
+        self.assertEqual(self.file_system_manager.root.children[1].name,
                          self.file_system_manager.path_handler.split_path(dir_name)[1])
         file_node = self.file_system_manager.path_handler.get_node_by_path(file_name)
         self.assertIsNotNone(file_node)
