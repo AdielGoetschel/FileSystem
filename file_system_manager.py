@@ -38,20 +38,26 @@ class CommandLayout:
 
 CommandMappingType: Type[Dict[str, CommandLayout]]
 
+"""
+Singleton pattern: Ensures that there is only one instance of FileSystemManager in the application.
+This is important for managing and coordinating file system operations, as having multiple instances
+could lead to conflicts and data inconsistencies. By implementing FileSystemManager as a singleton,
+we guarantee a single point of control for file system management.
+"""
+
 
 class FileSystemManager:
     _instance = None
 
     def __new__(cls, *args, **kwargs):
-        # create a new instance of a class
+        # Singleton pattern: If an instance doesn't exist, create one; otherwise, return the existing instance.
         if cls._instance is None:
-            # if the singleton instance has not been created, create a new instance of the class
             cls._instance = super(FileSystemManager, cls).__new__(cls)
         return cls._instance
 
     @classmethod
     def instance(cls):
-        # Return the existing singleton instance
+        # Return the existing singleton instance if it exists
         return cls._instance
 
     def __init__(self, check_for_backup_files=True):
