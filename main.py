@@ -3,7 +3,6 @@ import sys
 from typing import List
 from file_system_manager import FileSystemManager
 from parser_command import Parser
-from error_messages import ErrorMessages
 
 is_running: bool = True  # Initialize a flag to control whether the program is running
 STOP_EXECUTION_SIGNALS: List = [signal.SIGINT, signal.SIGTERM]  # Define a list of signals that can stop the program
@@ -57,7 +56,6 @@ def main():
                       f" to {command_args['destination_path']}")
             else:
                 print(f"{file_system_manager.get_failure_message_from_name(command_name)}")
-        # print(file_system_manager.memory_buffer.tolist()[:50])
 
     # This block will always execute, ensuring create_backup is called
     while True:
